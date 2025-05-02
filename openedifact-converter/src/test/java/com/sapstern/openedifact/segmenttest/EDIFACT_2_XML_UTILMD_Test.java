@@ -43,6 +43,7 @@ public class EDIFACT_2_XML_UTILMD_Test {
 	@Before public void setUp() throws SAXException
 	{
 		theXmlParser = EdifactSaxParserToXML.factory("UTF-8", logger);
+		((EdifactSaxParserToXML)theXmlParser).setXmlUnaAsString(true);
 	}
 	@Test
 	public void AGR01() throws Exception

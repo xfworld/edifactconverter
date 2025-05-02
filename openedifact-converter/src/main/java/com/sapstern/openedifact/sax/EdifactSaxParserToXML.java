@@ -84,6 +84,7 @@ import com.sapstern.openedifact.transform.StringTokenizerEscape;
  * 16.06.20   fricke         2.6 make parser output default XML namespace
  * 12.06.21	  orca007		 2.7 ISO-2022 issue (e.g. japanese charset)
  * 18.11.21   björn			 2.8 adding some Getters
+ * 03.05.25   Fricke		 2.9 UNA handling reworked to cope with flat S_UNA <S_UNA>:+.?*'</S_UNA>
  * -------------------------------------------------------------------------------------------------------------------------------
  *         </PRE>
  *
@@ -107,6 +108,7 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 	private boolean edielSwedish = false;
 	private boolean isNamepace = false; // echo the default namespace
 	private String nameSpace = "";
+	private boolean isXmlUnaAsString = false;
 
 	private java.util.logging.Logger logger = null;
 
@@ -118,8 +120,10 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 
 	private String theMessageName = null;
 
+
+
 	/**
-	 * Factory (with logging)for this parser
+	 * Factory (with encoding)for this parser
 	 * 
 	 * @param encoding
 	 * @return
@@ -132,7 +136,7 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 	}
 
 	/**
-	 * Factory for this parser
+	 * Factory (with logging)for this parser
 	 * 
 	 * @param encoding
 	 * @return
@@ -251,6 +255,15 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 	 */
 	private void parseCurrentSegment(EdifactSegment currentSegment) throws SAXException {
 		logger.entering("EdifactSaxParserToXML", "parseCurrentSegment");
+		if(currentSegment.segmentName.equals("S_UNA") && isXmlUnaAsString) {
+			String segmentString = new String(currentSegment.segmentString);  //&apos;	
+			//segmentString =	segmentString.replaceAll("'", "&apos;");
+			if(!segmentString.endsWith("'"))
+				segmentString = segmentString+"'";
+			contentHandler.characters(segmentString.toCharArray(), 0, segmentString.length());
+			return;
+		}
+			
 		List<EdifactField> eFields = currentSegment.segmentFields;
 
 		for (int count = 0; count < eFields.size(); count++) {
@@ -264,8 +277,7 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 					EdifactSubField subFieldObject = (EdifactSubField) subFieldList.get(j);
 					if (subFieldObject.subFieldTagName != null) {
 						contentHandler.startElement(namespaceURI, nameSpace, subFieldObject.subFieldTagName, attribs);
-						contentHandler.characters(subFieldObject.subFieldValue.toCharArray(), 0,
-								subFieldObject.subFieldValue.length());
+						contentHandler.characters(subFieldObject.subFieldValue.toCharArray(), 0, subFieldObject.subFieldValue.length());
 						contentHandler.endElement(namespaceURI, nameSpace, subFieldObject.subFieldTagName);
 					}
 				}
@@ -417,8 +429,7 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 			releaseChar = rawEdifact.substring(6, 7);
 			decimalSep = rawEdifact.substring(5, 6);
 		}
-		Hashtable<String, String> initialValues = getInitialValues(rawEdifact, segmentDelimiter,
-				componentDataSeparator);
+		Hashtable<String, String> initialValues = getInitialValues(rawEdifact, segmentDelimiter, componentDataSeparator);
 		// String messageName = (String)initialValues.get("messageName");
 		StringBuffer buffyRootTagName = new StringBuffer();
 		organization = (String) initialValues.get("messageOrganization");
@@ -813,8 +824,10 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 		// Input wasawasa 20191111
 		stripSegmentString(segmentObject);
 		// Spezialbehandlung UNA Segment notwendig CKE
-		if (segmentObject.segmentName.equals("S_UNA"))
-			return processUNASegmentObject(segmentObject);
+		if (segmentObject.segmentName.equals("S_UNA")) {
+			segmentObject = processUNASegmentObject(segmentObject);
+			return segmentObject;
+		}
 		// obtain a StringTokenizer including the separator tokens (+ in most of the
 		// cases)
 		StringTokenizerEscape loopToki = new StringTokenizerEscape(segmentObject.segmentString, fieldDelimiter, true,
@@ -900,15 +913,15 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 				StringTokenizerEscape fieldTokenizerSubFields = new StringTokenizerEscape(currentToken,
 						componentDataSeparator, true, releaseChar);
 				List<String> subFieldTokenList = fieldTokenizerSubFields.getAllTokens();
-//				if (segmentObject.segmentName.equals("S_IMD")||segmentObject.segmentName.equals("S_AGR"))
-//					System.out.println(segmentObject.segmentName+" name of composite: "+nameOfAttrib+" Size of composite element list: "+childElementsOfChildList.size()+" size of subfield token list: "+subFieldTokenList.size());
+				//				if (segmentObject.segmentName.equals("S_IMD")||segmentObject.segmentName.equals("S_AGR"))
+				//					System.out.println(segmentObject.segmentName+" name of composite: "+nameOfAttrib+" Size of composite element list: "+childElementsOfChildList.size()+" size of subfield token list: "+subFieldTokenList.size());
 				boolean wasComponentDataSeparatorLast = false;
 				int indexSubfields = 0;
 				// Match composite DOM structure to composite from EDI
 				for (int j = 0; j < childElementsOfChildList.size(); j++) {
 					Element theCurrentElement = childElementsOfChildList.get(j);
-//					if (segmentObject.segmentName.equals("S_IMD")||segmentObject.segmentName.equals("S_AGR"))
-//						System.out.println(theCurrentElement.getAttribute("ref"));
+					//					if (segmentObject.segmentName.equals("S_IMD")||segmentObject.segmentName.equals("S_AGR"))
+					//						System.out.println(theCurrentElement.getAttribute("ref"));
 					if (subFieldTokenList.size() <= indexSubfields)
 						break;
 					String currentSubFieldToken = subFieldTokenList.get(indexSubfields);
@@ -982,16 +995,16 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 	}
 
 	private EdifactSegment processUNASegmentObject(EdifactSegment segmentObject) {
-		// TODO Auto-generated method stub
-
+	
 		List<EdifactField> theFields = new LinkedList<EdifactField>();
+
 		theFields.add(new EdifactField("D_UNA1", componentDataSeparator, ""));
 		theFields.add(new EdifactField("D_UNA2", fieldDelimiter, ""));
 		theFields.add(new EdifactField("D_UNA3", decimalSep, ""));
 		theFields.add(new EdifactField("D_UNA4", releaseChar, ""));
 		theFields.add(new EdifactField("D_UNA5", "*", ""));
-
 		theFields.add(new EdifactField("D_UNA6", segmentDelimiter, ""));
+
 		segmentObject.segmentFields = theFields;
 		return segmentObject;
 	}
@@ -1149,6 +1162,13 @@ public class EdifactSaxParserToXML extends AbstractEdifactParser implements XMLR
 			segmentString = segmentString.substring(0, segmentString.length() - 1);
 			segmentObject.segmentString = segmentString;
 		}
+	}
+
+	/**
+	 * @param isXmlUnaAsString boolean to control UNA XML generation
+	 */
+	public void setXmlUnaAsString(boolean isXmlUnaAsString) {
+		this.isXmlUnaAsString = isXmlUnaAsString;
 	}
 
 }

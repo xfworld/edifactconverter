@@ -44,6 +44,7 @@ public class ConverterRunner {
 	static String inputString = null;
 	static String namespacePrefix = "";
 	static Level theLevel = null;
+	static boolean isXmlUnaAsString = false;
 	
 
 	
@@ -75,6 +76,7 @@ public class ConverterRunner {
 				else
 					theLogger = initLogging(Level.INFO);
 				EdifactSaxParserToXMLIF theXmlParser = EdifactSaxParserToXML.factory("UTF-8", theLogger, isNamespace);
+				((EdifactSaxParserToXML)theXmlParser).setXmlUnaAsString(isXmlUnaAsString);
 				String xmlData = theXmlParser.parseEdifact(inputString);
 				PrintWriter p = new PrintWriter(new FileOutputStream(new File("out.xml")));
 				System.out.println(xmlData);
@@ -149,9 +151,12 @@ public class ConverterRunner {
 			if(args[i].equals("-outNs"))
 				isNamespace = Boolean.parseBoolean(args[++i]);
 			
-			if(args[i].equals("-logLevel"))
-			{
+			if(args[i].equals("-logLevel"))			{
 				theLevel = Level.parse(args[++i]);
+			}
+			
+			if(args[i].equals("-isXmlUnaAsString"))	{
+				isXmlUnaAsString = Boolean.parseBoolean(args[++i]);
 			}
 			
 		}
